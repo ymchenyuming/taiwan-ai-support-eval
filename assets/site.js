@@ -119,58 +119,216 @@
     showStep(false);
   }
 
+  const airlock = document.querySelector('.home-airlock');
+  if (airlock) {
+    const lever = airlock.querySelector('.airlock-lever');
+    const leverLabel = lever.querySelector('.airlock-lever-label');
+    const room = airlock.querySelector('.airlock-room');
+    const launch = document.querySelector('.home-launch');
+    const destination = launch?.querySelector('.launch-destination');
+    const stars = launch?.querySelector('.launch-stars');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let drag = null, suppressClick = false, launching = false, launchTimer = 0, selectedLink = null;
+    const setOpen = (open) => {
+      if (!open && room.contains(document.activeElement)) lever.focus({ preventScroll: true });
+      airlock.classList.toggle('is-open', open);
+      lever.setAttribute('aria-expanded', String(open));
+      leverLabel.textContent = open ? '上推把手' : '拉下把手';
+      lever.querySelector('.lever-arrow').textContent = open ? '↑' : '↓';
+      room.inert = !open;
+    };
+    const resetDrag = () => {
+      const id = drag?.id;
+      drag = null;
+      lever.style.removeProperty('--lever-pull');
+      if (id !== undefined && lever.hasPointerCapture(id)) lever.releasePointerCapture(id);
+    };
+    const resetLaunch = (focus = false) => {
+      window.clearTimeout(launchTimer);
+      launchTimer = 0;
+      launching = false;
+      airlock.classList.remove('is-launching');
+      if (launch) { launch.hidden = true; launch.classList.remove('is-flying'); }
+      if (focus || document.activeElement === launch) selectedLink?.focus({ preventScroll: true });
+      selectedLink = null;
+    };
+    if (stars) {
+      for (let i = 0; i < 32; i++) {
+        const star = document.createElement('i');
+        star.style.setProperty('--angle', `${(i * 137.508) % 360}deg`);
+        star.style.setProperty('--distance', `${300 + (i * 97) % 501}px`);
+        star.style.setProperty('--delay', `${(i % 8) * 22}ms`);
+        stars.append(star);
+      }
+    }
+    airlock.classList.add('is-enhanced');
+    lever.hidden = false;
+    setOpen(false);
+    lever.addEventListener('click', (event) => {
+      if (suppressClick && event.detail !== 0) { suppressClick = false; return; }
+      suppressClick = false;
+      if (!launching) setOpen(!airlock.classList.contains('is-open'));
+    });
+    lever.addEventListener('pointerdown', (event) => {
+      if (launching || !event.isPrimary || event.button !== 0) return;
+      suppressClick = false;
+      const travel = parseFloat(getComputedStyle(lever).getPropertyValue('--lever-travel')) || 110;
+      const base = airlock.classList.contains('is-open') ? travel : 0;
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, travel, base, pull: base };
+      lever.setPointerCapture(event.pointerId);
+    });
+    lever.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+        suppressClick = true;
+        resetDrag();
+        return;
+      }
+      drag.moved ||= Math.abs(dx) > 8 || Math.abs(dy) > 8;
+      drag.pull = Math.max(0, Math.min(drag.travel, drag.base + dy));
+      lever.style.setProperty('--lever-pull', `${drag.pull}px`);
+    });
+    lever.addEventListener('pointerup', (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      if (drag.moved && Math.abs(drag.pull - drag.base) >= 28) setOpen(drag.pull > drag.base);
+      suppressClick ||= drag.moved;
+      resetDrag();
+    });
+    lever.addEventListener('pointercancel', () => { suppressClick = true; resetDrag(); });
+    lever.addEventListener('lostpointercapture', () => {
+      if (drag) { suppressClick ||= drag.moved; resetDrag(); }
+    });
+    airlock.addEventListener('click', (event) => {
+      const link = event.target.closest('a[data-launch]');
+      if (!link || !room.contains(link) || event.defaultPrevented || event.button !== 0 ||
+          event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      if (launching) { event.preventDefault(); return; }
+      if (reducedMotion.matches || !launch || !destination) return;
+      event.preventDefault();
+      launching = true;
+      selectedLink = link;
+      destination.textContent = link.dataset.launch;
+      launch.hidden = false;
+      launch.tabIndex = -1;
+      launch.focus({ preventScroll: true });
+      launch.classList.add('is-flying');
+      airlock.classList.add('is-launching');
+      launchTimer = window.setTimeout(() => { location.assign(link.href); }, 1600);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab' && launching) event.preventDefault();
+      if (event.key === 'Escape' && launching) { event.preventDefault(); resetLaunch(true); }
+    });
+    window.addEventListener('pagehide', () => {
+      window.clearTimeout(launchTimer);
+      launchTimer = 0;
+      resetDrag();
+    });
+    window.addEventListener('pageshow', () => {
+      resetLaunch();
+      resetDrag();
+      suppressClick = false;
+    });
+  }
+
   document.querySelectorAll('[data-comparison]').forEach((explorer) => {
     const rows = Array.from(explorer.querySelectorAll('.aud-compare tbody tr'));
     const topics = explorer.querySelector('.comparison-topics');
     const interactive = explorer.querySelector('.comparison-interactive');
     const tables = explorer.querySelector('.comparison-tables');
     const models = explorer.querySelector('.comparison-models');
-    let model = 'gemini';
-    let topic = 0;
+    const clinicalModels = models.classList.contains('clinical-models');
+    const requestedModel = new URLSearchParams(location.search).get('model');
+    let model = requestedModel === 'chatgpt' ? 'chatgpt' : 'gemini';
+    let expandedModel = null;
     let view = 'explore';
+    const answers = [];
     const shortLabels = {
-      '不想接受AI建議的話會...?': '不接受建議時',
-      '探索使用者狀態': '探索',
-      '尊重使用者自主性？': '自主性',
-      '模型端應使用者回應調整': '調整',
+      '不想接受AI建議的話會...?': '使用者不接受建議，則模型會…？',
+      '探索使用者狀態': '探索使用者狀態的能力',
+      '尊重使用者自主性？': '是否尊重使用者自主',
+      '模型端應使用者回應調整': '使用者不接受建議，則模型會…？',
       '自傷回應': '安全'
     };
     const render = () => {
-      const row = rows[topic];
       explorer.dataset.model = model;
       explorer.querySelectorAll('[data-model]').forEach((button) => {
         button.setAttribute('aria-pressed', String(button.dataset.model === model));
+        if (clinicalModels) {
+          const expanded = button.dataset.model === expandedModel;
+          button.setAttribute('aria-expanded', String(expanded));
+          button.querySelectorAll('.comparison-model-score, .comparison-model-description').forEach((part) => {
+            part.setAttribute('aria-hidden', String(!expanded));
+          });
+        }
       });
-      topics.querySelectorAll('button').forEach((button, index) => {
-        button.setAttribute('aria-pressed', String(index === topic));
+      answers.forEach((answer, index) => {
+        answer.textContent = rows[index].cells[model === 'gemini' ? 1 : 2].textContent.trim();
       });
-      explorer.querySelector('.comparison-answer-text').textContent =
-        row.cells[model === 'gemini' ? 1 : 2].textContent.trim();
     };
     rows.forEach((row, index) => {
       const button = document.createElement('button');
       const label = row.cells[0].textContent.trim();
+      const title = document.createElement('span');
+      const pane = document.createElement('span');
+      const answer = document.createElement('span');
+      const shade = document.createElement('span');
       button.type = 'button';
+      button.className = 'comparison-window';
       button.dataset.topic = String(index);
-      button.textContent = shortLabels[label] || label;
-      button.addEventListener('click', () => { topic = index; render(); });
+      title.className = 'comparison-window-label';
+      title.textContent = explorer.dataset.comparison === 'public' && label === '建議'
+        ? '模型給建議' : shortLabels[label] || label;
+      pane.className = 'comparison-window-pane';
+      pane.setAttribute('aria-hidden', 'true');
+      answer.className = 'comparison-window-answer';
+      answer.id = `comparison-${explorer.dataset.comparison}-${index}-answer`;
+      shade.className = 'comparison-window-shade';
+      shade.setAttribute('aria-hidden', 'true');
+      button.setAttribute('aria-label', title.textContent);
+      button.setAttribute('aria-expanded', 'false');
+      pane.append(answer, shade);
+      button.append(title, pane);
+      button.addEventListener('click', () => {
+        const open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        pane.setAttribute('aria-hidden', String(!open));
+        if (open) button.setAttribute('aria-describedby', answer.id);
+        else button.removeAttribute('aria-describedby');
+      });
+      answers.push(answer);
       topics.append(button);
     });
     explorer.querySelectorAll('[data-model]').forEach((button) => {
-      button.addEventListener('click', () => { model = button.dataset.model; render(); });
+      button.disabled = false;
+      button.addEventListener('click', () => {
+        if (model !== button.dataset.model) {
+          topics.querySelectorAll('.comparison-window').forEach((windowButton) => {
+            windowButton.setAttribute('aria-expanded', 'false');
+            windowButton.querySelector('.comparison-window-pane').setAttribute('aria-hidden', 'true');
+            windowButton.removeAttribute('aria-describedby');
+          });
+        }
+        model = button.dataset.model;
+        if (clinicalModels) expandedModel = expandedModel === model ? null : model;
+        render();
+      });
     });
     explorer.querySelectorAll('[data-view]').forEach((button) => {
       button.addEventListener('click', () => {
         view = button.dataset.view;
         interactive.hidden = view !== 'explore';
         tables.hidden = view !== 'table';
-        models.hidden = view === 'table';
+        models.hidden = view === 'table' && !clinicalModels;
+        models.querySelectorAll('button').forEach((item) => { item.disabled = view === 'table' && !clinicalModels; });
         explorer.querySelectorAll('[data-view]').forEach((item) => {
           item.setAttribute('aria-pressed', String(item.dataset.view === view));
         });
       });
     });
     explorer.querySelector('.comparison-toolbar').hidden = false;
+    explorer.querySelector('.comparison-views').hidden = false;
     interactive.hidden = false;
     tables.hidden = true;
     render();
@@ -189,6 +347,11 @@
     wrapper.replaceWith(experience);
     const reopen = research.querySelector('.research-reopen');
     const overview = experience.querySelector('.research-overview');
+    const resources = experience.querySelector('.research-resources');
+    const languageLinks = research.querySelectorAll('.research-language-switch a');
+    const syncLanguageLinks = (id) => {
+      languageLinks.forEach((link) => { link.hash = `#${id}`; });
+    };
     const stops = Array.from(expedition.querySelectorAll('.research-stops > .research-stop'));
     const orbs = Array.from(expedition.querySelectorAll('.research-orb'));
     const navigation = research.querySelector('.research-side-nav');
@@ -197,6 +360,7 @@
     const nextStop = expedition.querySelector('.research-next');
     const position = expedition.querySelector('.research-position');
     let activeStop = 0;
+    let backdropPress = null;
     const reader = document.createElement('dialog');
     reader.className = 'research-reader';
     const readerToolbar = document.createElement('div');
@@ -243,6 +407,7 @@
     nextStop.textContent = english ? 'Walk on' : '往前走';
 
     const closeReader = (focus = true) => {
+      backdropPress = null;
       if (reader.open) reader.close();
       if (focus) orbs[activeStop].focus({ preventScroll: true });
     };
@@ -253,6 +418,7 @@
         if (!experience.open) experience.showModal();
         scene?.start();
       } else {
+        if (resources) resources.open = false;
         closeReader(false);
         if (experience.open) experience.close();
         scene?.stop();
@@ -293,6 +459,7 @@
       setExperience(true);
       closeNavigation();
       if (updateHistory) updateHash(stops[activeStop].id);
+      syncLanguageLinks(stops[activeStop].id);
     };
     const openStop = (index, updateHistory = false, focus = true) => {
       travelTo(index, updateHistory);
@@ -331,6 +498,7 @@
       }
       closeNavigation();
       if (updateHistory) updateHash(id);
+      syncLanguageLinks(id);
       return true;
     };
     const followHash = () => {
@@ -347,8 +515,28 @@
     readerOverview.addEventListener('click', () => visit('findings', true));
     returnToRoad.addEventListener('click', () => closeReader());
     reader.addEventListener('cancel', (event) => { event.preventDefault(); event.stopPropagation(); closeReader(); });
+    reader.addEventListener('pointerdown', (event) => {
+      const rect = reader.getBoundingClientRect();
+      const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+      backdropPress = event.target === reader && outside && event.isPrimary && event.button === 0
+        ? { x: event.clientX, y: event.clientY } : null;
+    }, { passive: true });
+    reader.addEventListener('pointercancel', () => { backdropPress = null; });
+    reader.addEventListener('click', (event) => {
+      const press = backdropPress;
+      backdropPress = null;
+      if (!press || event.target !== reader) return;
+      const rect = reader.getBoundingClientRect();
+      const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+      if (outside && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 8) closeReader();
+    });
     experience.addEventListener('cancel', (event) => {
       event.preventDefault();
+      if (resources?.open) {
+        resources.open = false;
+        resources.querySelector('summary').focus({ preventScroll: true });
+        return;
+      }
       visit('findings', true);
       reopen.focus({ preventScroll: true });
     });
@@ -370,7 +558,7 @@
     let wheelDirection = 0;
     let wheelLocked = false;
     experience.addEventListener('wheel', (event) => {
-      if (!experience.open || reader.open || event.ctrlKey || event.metaKey) return;
+      if (!experience.open || reader.open || event.ctrlKey || event.metaKey || resources?.contains(event.target)) return;
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       event.preventDefault();
       const now = performance.now();
@@ -393,7 +581,7 @@
     let swipeStart = null;
     experience.addEventListener('touchstart', (event) => {
       const touch = event.touches[0];
-      swipeStart = experience.open && !reader.open && event.touches.length === 1
+      swipeStart = experience.open && !reader.open && !resources?.contains(event.target) && event.touches.length === 1
         ? { x: touch.clientX, y: touch.clientY } : null;
     }, { passive: true });
     experience.addEventListener('touchmove', (event) => {
@@ -429,6 +617,7 @@
     });
     document.addEventListener('click', (event) => {
       if (!navigation.contains(event.target) && !toggle.contains(event.target)) closeNavigation();
+      if (resources?.open && !resources.contains(event.target)) resources.open = false;
     });
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && navigation.classList.contains('is-open')) closeNavigation(true);

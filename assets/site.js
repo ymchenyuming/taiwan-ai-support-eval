@@ -332,6 +332,16 @@
     interactive.hidden = false;
     tables.hidden = true;
     render();
+    // Start mobile arrivals at the model controls; retain anchors and restored scroll positions.
+    window.addEventListener('pageshow', (event) => {
+      const navigation = performance.getEntriesByType('navigation')[0];
+      if (event.persisted || navigation?.type !== 'navigate' || location.hash || window.scrollY > 0
+          || !window.matchMedia('(max-width:680px)').matches) return;
+      const headerBottom = document.querySelector('.aud-header')?.getBoundingClientRect().bottom || 0;
+      const quizBottom = document.querySelector('.quiz-launch-public')?.getBoundingClientRect().bottom || 0;
+      const toolbarTop = explorer.querySelector('.comparison-toolbar').getBoundingClientRect().top;
+      window.scrollTo({ top: Math.max(0, toolbarTop - Math.max(headerBottom, quizBottom) - 10), behavior: 'instant' });
+    }, { once: true });
   });
 
   const research = document.querySelector('.aud-research');

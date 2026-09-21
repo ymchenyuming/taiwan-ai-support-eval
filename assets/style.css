@@ -962,7 +962,7 @@ body.research-open{overflow:hidden}
  .home-orbit{width:128%;height:47%;transform:translate(-50%,-50%) rotate(-28deg)}
  .home-orbit-violet{width:124%;height:46%;transform:translate(-50%,-50%) rotate(32deg)}
  .home-star-warm{top:25%;left:10%;font-size:15px}.home-star-violet{top:66%;right:9%;font-size:12px}
- .home-opening-next{bottom:48px;font-size:.74rem;gap:10px;white-space:nowrap}
+ .home-opening-next{bottom:calc(7rem + env(safe-area-inset-bottom));font-size:.74rem;gap:10px;white-space:nowrap}
 }
 @media(prefers-reduced-motion:reduce){.home-opening-copy,.home-meteor{animation:none}.home-opening-next>span{transition:none}}
 @media print{.home-opening{min-height:0;padding:30px 0}.home-opening-sky,.home-opening-next{display:none}.home-opening h1>span,.home-question{color:inherit!important}.home-opening-copy{animation:none}}
@@ -1148,6 +1148,8 @@ body.research-open{overflow:hidden}
  .aud-clinical .comparison-window-pane{max-width:190px;min-height:190px;padding:16px 10px}
 }
 @media(max-width:999px){
+ :is(.aud-clinical,.aud-public) .comparison-topics .comparison-window{display:grid;grid-row:span 2;grid-template-rows:subgrid;justify-items:center;align-items:stretch}
+ :is(.aud-clinical,.aud-public) .comparison-window-label{min-height:0}
  .aud-clinical .comparison-topics .comparison-window:last-child{grid-column:1 / -1}
  .aud-clinical .comparison-window:last-child .comparison-window-label{min-height:1.5em}
  .aud-clinical .comparison-window:last-child .comparison-window-pane{max-width:320px;min-height:140px}
@@ -1160,6 +1162,28 @@ body.research-open{overflow:hidden}
  .aud-clinical .comparison-window-shade{border-radius:39px}
  .aud-clinical .comparison-window-shade::before{border-radius:31px}
  .aud-clinical .comparison-window-answer{font-size:.96rem}
+}
+/* Give the mobile reading pages more room for the cabin windows. */
+@media(max-width:680px){
+ .compact-copy:has(.aud-public,.aud-clinical) .aud-nav{min-height:0;gap:2px;padding-block:6px 2px}
+ .compact-copy:has(.aud-public,.aud-clinical) .aud-brand{font-size:.85rem}
+ .compact-copy:has(.aud-public,.aud-clinical) .aud-nav nav a{display:flex;align-items:center;min-height:44px;padding:6px 8px}
+ .compact-copy .aud-main.aud-clinical{padding-top:10px}
+ .compact-copy .aud-clinical .aud-page-head{padding:0 0 8px}
+ .compact-copy .aud-clinical .aud-page-head h1{font-size:1.25rem;line-height:1.35}
+ .compact-copy .aud-clinical .aud-page-head h1 br{display:none}
+ .compact-copy .aud-clinical .aud-page-head h1 span{display:block;font-size:.85rem;font-weight:400;line-height:1.6}
+ .compact-copy :is(.aud-public,.aud-clinical) .aud-product-disclosure{margin:0 0 4px}
+ .compact-copy :is(.aud-public,.aud-clinical) .aud-product-disclosure>summary{padding-block:11px;min-height:44px}
+ .compact-copy .aud-main.aud-public{padding-top:60px}
+ .compact-copy .aud-public .quiz-launch-public{top:80px}
+ :is(.aud-public,.aud-clinical) .comparison-toolbar{gap:6px;margin-bottom:10px;align-items:start}
+ :is(.aud-public,.aud-clinical) .comparison-models{width:auto;flex:1 1 9rem;gap:6px;align-self:center}
+ :is(.aud-public,.aud-clinical) .comparison-toolbar button{padding:8px 6px;font-size:.78rem;min-height:44px}
+ :is(.aud-public,.aud-clinical) .comparison-views{flex:0 0 auto;gap:0;padding:2px;border-radius:12px}
+ :is(.aud-public,.aud-clinical) .comparison-view-icon{display:none}
+ .aud-clinical .clinical-models:has([aria-expanded=true]){flex-basis:100%}
+ .aud-clinical .clinical-models [aria-expanded=true] .comparison-model-description{max-height:none}
 }
 @media(prefers-reduced-motion:reduce){.comparison-views button,.comparison-interactive,.comparison-topics button,.comparison-toolbar .clinical-models button,.comparison-model-score,.comparison-model-description{transition:none}.comparison-topics button:hover{transform:none}}
 @media print{.comparison-toolbar .clinical-models{display:grid!important}.aud-clinical .comparison-toolbar{display:block!important}.aud-clinical .comparison-views{display:none!important}}
